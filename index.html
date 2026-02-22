@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>Yuzen Stamp AR</title>
+
+  <!-- A-Frame -->
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <!-- MindAR (A-Frame版) -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
+    #hint {
+      position: fixed; top: 12px; left: 12px; right: 12px;
+      padding: 10px 12px; border-radius: 12px;
+      background: rgba(255,255,255,0.92);
+      font-size: 14px;
+    }
+    #panel {
+      position: fixed; left: 12px; right: 12px; bottom: 12px;
+      padding: 14px; border-radius: 12px;
+      background: rgba(0,0,0,0.72);
+      color: #fff;
+      line-height: 1.5;
+      display: none;
+    }
+    #panel .title { font-weight: 700; margin-bottom: 6px; }
+    
+    #petalsLayer{
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 9999; /* パネルより上に出したい場合。下にするなら小さく */
+}
+.petal{
+  position: absolute;
+  top: -12%;
+  opacity: 0.9;
+  will-change: transform;
+  user-select: none;
+}
+
+  </style>
+</head>
+
+<body>
+  <div id="hint">スタンプ印面（ターゲット画像）をカメラに映してください。</div>
+
+  <div id="panel">
+    <div class="title" id="panelTitle"></div>
+    <div id="panelBody"></div>
+  </div>
+  <div id="petalsLayer"></div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./assets/targets.mind; maxTrack: 1"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+  <img id="petalTex" src="./assets/textures/sakura.png" />
+</a-assets>
+
+<!--<a-entity light="type: ambient; intensity: 1.2"></a-entity>-->
+<!--<a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>-->
+
+    <a-camera position="0 0 0" look-controls="enabled: false">
+    </a-camera>
+
+    <!-- 例：3つ登録した場合 -->
+    <a-entity id="t0" mindar-image-target="targetIndex: 0"></a-entity>
+    <a-entity id="t1" mindar-image-target="targetIndex: 1"></a-entity>
+    <a-entity id="t2" mindar-image-target="targetIndex: 2">
+      <!-- 花びらの“発生場所” -->
+             <!--<a-entity id="sakuraEmitter" position="0 0.2 0.05"></a-entity>-->
+            </a-entity>
+    <a-entity id="t3" mindar-image-target="targetIndex: 3"></a-entity>
+  </a-scene>
+
+  <script>
+    // ターゲットごとの説明（まずは直書き。後でJSON化推奨）
+    const STAMPS = {
+      0: { title: "椿", body: "椿は、寒い季節に凛と咲く花として、日本では古くから親しまれてきました。艶やかな花姿と力強い生命力から、美しさ、気高さ、そして内に秘めた強さを象徴する文様とされています。" },
+      1: { title: "菊", body: "菊は、高貴さと長寿を象徴する花として、古来より日本文化に深く根付いています。皇室の紋章にも用いられ、不老長寿や気品、格式を表す格調高い文様です。" },
+      2: { title: "桜", body: "桜は、日本を象徴する花であり、春の訪れや新たな始まりを表します。短い期間で散るその姿から、人生のはかなさや一瞬の美しさを表現する文様として親しまれています。" },
+      3: { title: "梅", body: "梅は、寒さの中でいち早く花を咲かせることから、忍耐、希望、再生の象徴とされています。春を告げる花として、学問や成長を願う意味も込められた文様です。" },
+    };
+
+    const panel = document.getElementById("panel");
+    const panelTitle = document.getElementById("panelTitle");
+    const panelBody = document.getElementById("panelBody");
+
+    function bindTargetEvents(el, index) {
+      el.addEventListener("targetFound", () => {
+        const data = STAMPS[index] || { title: `文様 ${index}`, body: "" };
+        panelTitle.textContent = data.title;
+        panelBody.textContent = data.body;
+        panel.style.display = "block";
+      });
+
+      el.addEventListener("targetLost", () => {
+        panel.style.display = "none";
+      });
+    }
+
+    bindTargetEvents(document.getElementById("t0"), 0);
+    bindTargetEvents(document.getElementById("t1"), 1);
+    bindTargetEvents(document.getElementById("t2"), 2);
+    bindTargetEvents(document.getElementById("t3"), 3);
+  
+// --- 桜吹雪（DOMオーバーレイ版）---
+const sakuraTarget = document.getElementById("t2");
+const petalsLayer = document.getElementById("petalsLayer");
+
+let petalsRunning = false;
+let petalsInterval = null;
+let petalsStopTimer = null;
+
+// 調整はここだけ
+const SPAWN_INTERVAL_MS = 120; // 小さいほどたくさん出る（重ければ150〜220）
+const DOUBLE_SPAWN_PROB = 0.55; // 2枚同時発生の確率
+const SIZE_MIN = 18;            // px
+const SIZE_MAX = 44;            // px
+const DURATION_MIN = 2500;      // ms
+const DURATION_MAX = 5200;      // ms
+
+function rand(min, max){ return min + Math.random() * (max - min); }
+
+function spawnPetal(){
+  const img = document.createElement("img");
+  img.className = "petal";
+  img.src = "./assets/textures/sakura.png"; // 透過PNGの花びら画像にして下さい
+
+  const size = rand(SIZE_MIN, SIZE_MAX);
+  img.style.width = `${size}px`;
+  img.style.height = `${size}px`;
+
+  // 画面横のランダム位置
+  img.style.left = `${Math.random() * 100}%`;
+
+  const duration = rand(DURATION_MIN, DURATION_MAX);
+  const drift = rand(-80, 80);      // 横風
+  const rotate = rand(-540, 540);   // 回転量
+
+  img.animate([
+    { transform: `translate(0, 0) rotate(0deg)`, opacity: 0.0 },
+    { transform: `translate(${drift * 0.4}px, 45vh) rotate(${rotate * 0.4}deg)`, opacity: 0.9 },
+    { transform: `translate(${drift}px, 115vh) rotate(${rotate}deg)`, opacity: 0.0 }
+  ], { duration, iterations: 1, easing: "linear" });
+
+  petalsLayer.appendChild(img);
+  setTimeout(() => img.remove(), duration + 50);
+}
+
+function startPetals(){
+  if (petalsRunning) return;
+  petalsRunning = true;
+
+  if (petalsStopTimer) clearTimeout(petalsStopTimer);
+
+  petalsInterval = setInterval(() => {
+    spawnPetal();
+    if (Math.random() < DOUBLE_SPAWN_PROB) spawnPetal();
+  }, SPAWN_INTERVAL_MS);
+}
+
+function stopPetals(){
+  // 検出揺れ対策で“1秒粘る”
+  if (petalsStopTimer) clearTimeout(petalsStopTimer);
+  petalsStopTimer = setTimeout(() => {
+    if (petalsInterval) clearInterval(petalsInterval);
+    petalsInterval = null;
+    petalsRunning = false;
+  }, 1000);
+}
+
+sakuraTarget.addEventListener("targetFound", startPetals);
+sakuraTarget.addEventListener("targetLost", stopPetals);
+
+
+  </script>
+</body>
+</html>
