@@ -11,177 +11,485 @@
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; }
-    #hint {
-      position: fixed; top: 12px; left: 12px; right: 12px;
-      padding: 10px 12px; border-radius: 12px;
-      background: rgba(255,255,255,0.92);
-      font-size: 14px;
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
     }
+
+    #hint {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.92);
+      font-size: 14px;
+      z-index: 1000;
+    }
+
+    #langToggle {
+      position: fixed;
+      top: 56px;
+      right: 12px;
+      z-index: 11000;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.72);
+      color: #fff;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
     #panel {
-      position: fixed; left: 12px; right: 12px; bottom: 12px;
-      padding: 14px; border-radius: 12px;
-      background: rgba(0,0,0,0.72);
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.72);
       color: #fff;
       line-height: 1.5;
       display: none;
+      z-index: 10000;
     }
-    #panel .title { font-weight: 700; margin-bottom: 6px; }
-    
-    #petalsLayer{
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 9999; /* パネルより上に出したい場合。下にするなら小さく */
-}
-.petal{
-  position: absolute;
-  top: -12%;
-  opacity: 0.9;
-  will-change: transform;
-  user-select: none;
-}
 
+    #panel .title {
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    /* 演出レイヤー */
+    #fxOverlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 9000;
+    }
+
+    .fx-item {
+      position: absolute;
+      pointer-events: none;
+      will-change: transform, opacity;
+      user-select: none;
+    }
+
+    /* 春：桜 */
+    .petal {
+      top: -12%;
+      opacity: 0.9;
+    }
+
+    /* 夏：波紋 */
+    .ripple {
+      border: 3px solid rgba(66, 170, 255, 0.9);
+      border-radius: 999px;
+      box-shadow:
+        0 0 0 2px rgba(255,255,255,0.35) inset,
+        0 0 12px rgba(66, 170, 255, 0.35);
+    }
+
+    /* 秋：紅葉 */
+    .leaf {
+      top: -12%;
+      opacity: 0.95;
+    }
+
+    /* 冬：雪 */
+    .snow {
+      background: rgba(255, 255, 255, 0.95);
+      border-radius: 999px;
+      box-shadow:
+        0 0 10px rgba(255,255,255,0.8),
+        0 0 18px rgba(180,220,255,0.35);
+    }
   </style>
 </head>
 
 <body>
   <div id="hint">スタンプ印面（ターゲット画像）をカメラに映してください。</div>
+  <button id="langToggle">EN</button>
 
   <div id="panel">
     <div class="title" id="panelTitle"></div>
     <div id="panelBody"></div>
   </div>
-  <div id="petalsLayer"></div>
+
+  <div id="fxOverlay"></div>
 
   <a-scene
-    mindar-image="imageTargetSrc: ./assets/targets.mind; maxTrack: 1"
+    mindar-image="imageTargetSrc: ./assets/targets.mind?v=2; maxTrack: 1"
     renderer="colorManagement: true, physicallyCorrectLights"
     vr-mode-ui="enabled: false"
     device-orientation-permission-ui="enabled: false"
   >
     <a-assets>
-  <img id="petalTex" src="./assets/textures/sakura.png" />
-</a-assets>
+      <img id="petalTex" src="./assets/textures/sakura.png" />
+      <img id="momijiTex" src="./assets/textures/momiji.png" />
+    </a-assets>
 
-<!--<a-entity light="type: ambient; intensity: 1.2"></a-entity>-->
-<!--<a-entity light="type: directional; intensity: 0.8" position="1 2 1"></a-entity>-->
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-    <a-camera position="0 0 0" look-controls="enabled: false">
-    </a-camera>
-
-    <!-- 例：3つ登録した場合 -->
     <a-entity id="t0" mindar-image-target="targetIndex: 0"></a-entity>
     <a-entity id="t1" mindar-image-target="targetIndex: 1"></a-entity>
-    <a-entity id="t2" mindar-image-target="targetIndex: 2">
-      <!-- 花びらの“発生場所” -->
-             <!--<a-entity id="sakuraEmitter" position="0 0.2 0.05"></a-entity>-->
-            </a-entity>
+    <a-entity id="t2" mindar-image-target="targetIndex: 2"></a-entity>
     <a-entity id="t3" mindar-image-target="targetIndex: 3"></a-entity>
   </a-scene>
 
   <script>
-    // ターゲットごとの説明（まずは直書き。後でJSON化推奨）
     const STAMPS = {
-      0: { title: "椿", body: "椿は、寒い季節に凛と咲く花として、日本では古くから親しまれてきました。艶やかな花姿と力強い生命力から、美しさ、気高さ、そして内に秘めた強さを象徴する文様とされています。" },
-      1: { title: "菊", body: "菊は、高貴さと長寿を象徴する花として、古来より日本文化に深く根付いています。皇室の紋章にも用いられ、不老長寿や気品、格式を表す格調高い文様です。" },
-      2: { title: "桜", body: "桜は、日本を象徴する花であり、春の訪れや新たな始まりを表します。短い期間で散るその姿から、人生のはかなさや一瞬の美しさを表現する文様として親しまれています。" },
-      3: { title: "梅", body: "梅は、寒さの中でいち早く花を咲かせることから、忍耐、希望、再生の象徴とされています。春を告げる花として、学問や成長を願う意味も込められた文様です。" },
+      0: {
+        ja: {
+          title: "桜",
+          body: "桜は、日本の春を象徴する花であり、新しい門出や人生の節目を祝う象徴として親しまれてきました。満開に咲く姿は未来への希望を、舞い散る花びらは新たな旅立ちを表します。祝福と始まりの意味を込めた文様です。"
+        },
+        en: {
+          title: "Cherry Blossom",
+          body: "Cherry blossoms symbolize the arrival of spring in Japan and are closely associated with new beginnings and celebration. Their full bloom expresses hope for the future, while falling petals evoke the beauty of departure and a fresh start."
+        }
+      },
+
+      1: {
+        ja: {
+          title: "波と富士",
+          body: "波は絶え間なく続く自然の力を、富士山は揺るがない存在と永遠性を象徴します。二つの意匠が重なることで、力強さと繁栄、そして未来へ続く勢いを表現しています。夏の活力を感じさせる文様です。"
+        },
+        en: {
+          title: "Waves and Mt. Fuji",
+          body: "Waves represent the enduring force of nature, while Mt. Fuji symbolizes permanence and an unshakable presence. Together, they express strength, prosperity, and momentum that continues into the future, capturing the vitality of summer."
+        }
+      },
+
+      2: {
+        ja: {
+          title: "紅葉",
+          body: "紅葉は、季節の移ろいの中で自然が最も豊かに色づく瞬間を表します。実りを迎えた成熟の象徴であり、これまでの歩みに感謝する心を表す文様です。静かで深い美しさを感じさせます。"
+        },
+        en: {
+          title: "Maple Leaves",
+          body: "Maple leaves represent the moment when nature reaches its richest colors in the changing seasons. They symbolize maturity, fulfillment, and gratitude for the path that has brought us here, conveying a quiet and profound beauty."
+        }
+      },
+
+      3: {
+        ja: {
+          title: "雪と松",
+          body: "松は一年を通して緑を保つことから、不変や長寿の象徴とされています。そこに雪景色が重なることで、静けさの中に宿る生命力と吉祥の意味が生まれます。新しい年の幸福を願う文様です。"
+        },
+        en: {
+          title: "Pine and Snow",
+          body: "Because pine trees remain green throughout the year, they have long symbolized longevity and constancy. Combined with snow, the motif expresses quiet vitality and auspicious wishes for happiness and good fortune in the year ahead."
+        }
+      }
     };
 
+    const HINT_TEXT = {
+      ja: "スタンプ印面（ターゲット画像）をカメラに映してください。",
+      en: "Point your camera at the stamp image target."
+    };
+
+    const browserLang = navigator.language || navigator.userLanguage;
+    let LANG = browserLang && browserLang.toLowerCase().startsWith("ja") ? "ja" : "en";
+
+    const hint = document.getElementById("hint");
     const panel = document.getElementById("panel");
     const panelTitle = document.getElementById("panelTitle");
     const panelBody = document.getElementById("panelBody");
+    const fxOverlay = document.getElementById("fxOverlay");
+    const langToggle = document.getElementById("langToggle");
 
-    function bindTargetEvents(el, index) {
+    function updateLangButton() {
+      langToggle.textContent = LANG === "ja" ? "EN" : "JP";
+    }
+
+    function updateHint() {
+      hint.textContent = HINT_TEXT[LANG];
+    }
+
+    // ===== テキスト表示＋演出呼び出し =====
+    function bindTargetEvents(el, index, onFound, onLost) {
+      if (!el) return;
+
       el.addEventListener("targetFound", () => {
-        const data = STAMPS[index] || { title: `文様 ${index}`, body: "" };
+        const data = STAMPS[index]?.[LANG] || { title: `Item ${index}`, body: "" };
         panelTitle.textContent = data.title;
         panelBody.textContent = data.body;
         panel.style.display = "block";
+
+        if (onFound) onFound();
       });
 
       el.addEventListener("targetLost", () => {
         panel.style.display = "none";
+
+        if (onLost) onLost();
       });
     }
 
-    bindTargetEvents(document.getElementById("t0"), 0);
-    bindTargetEvents(document.getElementById("t1"), 1);
-    bindTargetEvents(document.getElementById("t2"), 2);
-    bindTargetEvents(document.getElementById("t3"), 3);
-  
-// --- 桜吹雪（DOMオーバーレイ版）---
-const sakuraTarget = document.getElementById("t2");
-const petalsLayer = document.getElementById("petalsLayer");
+    // ===== 共通ユーティリティ =====
+    function rand(min, max) {
+      return min + Math.random() * (max - min);
+    }
 
-let petalsRunning = false;
-let petalsInterval = null;
-let petalsStopTimer = null;
+    const effectState = {
+      spring: { running: false, interval: null, stopTimer: null },
+      summer: { running: false, interval: null, stopTimer: null },
+      autumn: { running: false, interval: null, stopTimer: null },
+      winter: { running: false, interval: null, stopTimer: null }
+    };
 
-// 調整はここだけ
-const SPAWN_INTERVAL_MS = 120; // 小さいほどたくさん出る（重ければ150〜220）
-const DOUBLE_SPAWN_PROB = 0.55; // 2枚同時発生の確率
-const SIZE_MIN = 18;            // px
-const SIZE_MAX = 44;            // px
-const DURATION_MIN = 2500;      // ms
-const DURATION_MAX = 5200;      // ms
+    function clearEffectState(state) {
+      if (state.interval) {
+        clearInterval(state.interval);
+        state.interval = null;
+      }
+      if (state.stopTimer) {
+        clearTimeout(state.stopTimer);
+        state.stopTimer = null;
+      }
+      state.running = false;
+    }
 
-function rand(min, max){ return min + Math.random() * (max - min); }
+    // ===== 春：桜吹雪 =====
+    function spawnPetal() {
+      const img = document.createElement("img");
+      img.className = "fx-item petal";
+      img.src = "./assets/textures/sakura.png";
 
-function spawnPetal(){
-  const img = document.createElement("img");
-  img.className = "petal";
-  img.src = "./assets/textures/sakura.png"; // 透過PNGの花びら画像にして下さい
+      const size = rand(18, 42);
+      img.style.width = `${size}px`;
+      img.style.height = `${size}px`;
+      img.style.left = `${Math.random() * 100}%`;
 
-  const size = rand(SIZE_MIN, SIZE_MAX);
-  img.style.width = `${size}px`;
-  img.style.height = `${size}px`;
+      const duration = rand(2600, 5200);
+      const drift = rand(-90, 90);
+      const rotate = rand(-540, 540);
 
-  // 画面横のランダム位置
-  img.style.left = `${Math.random() * 100}%`;
+      img.animate(
+        [
+          { transform: "translate(0, 0) rotate(0deg)", opacity: 0.0 },
+          { transform: `translate(${drift * 0.45}px, 45vh) rotate(${rotate * 0.45}deg)`, opacity: 0.9 },
+          { transform: `translate(${drift}px, 115vh) rotate(${rotate}deg)`, opacity: 0.0 }
+        ],
+        {
+          duration,
+          iterations: 1,
+          easing: "linear"
+        }
+      );
 
-  const duration = rand(DURATION_MIN, DURATION_MAX);
-  const drift = rand(-80, 80);      // 横風
-  const rotate = rand(-540, 540);   // 回転量
+      fxOverlay.appendChild(img);
+      setTimeout(() => img.remove(), duration + 50);
+    }
 
-  img.animate([
-    { transform: `translate(0, 0) rotate(0deg)`, opacity: 0.0 },
-    { transform: `translate(${drift * 0.4}px, 45vh) rotate(${rotate * 0.4}deg)`, opacity: 0.9 },
-    { transform: `translate(${drift}px, 115vh) rotate(${rotate}deg)`, opacity: 0.0 }
-  ], { duration, iterations: 1, easing: "linear" });
+    function startSpring() {
+      const state = effectState.spring;
+      if (state.running) return;
+      state.running = true;
 
-  petalsLayer.appendChild(img);
-  setTimeout(() => img.remove(), duration + 50);
-}
+      if (state.stopTimer) clearTimeout(state.stopTimer);
 
-function startPetals(){
-  if (petalsRunning) return;
-  petalsRunning = true;
+      state.interval = setInterval(() => {
+        spawnPetal();
+        if (Math.random() < 0.45) spawnPetal();
+      }, 150);
+    }
 
-  if (petalsStopTimer) clearTimeout(petalsStopTimer);
+    function stopSpring() {
+      const state = effectState.spring;
+      if (state.stopTimer) clearTimeout(state.stopTimer);
 
-  petalsInterval = setInterval(() => {
-    spawnPetal();
-    if (Math.random() < DOUBLE_SPAWN_PROB) spawnPetal();
-  }, SPAWN_INTERVAL_MS);
-}
+      state.stopTimer = setTimeout(() => {
+        clearEffectState(state);
+      }, 1000);
+    }
 
-function stopPetals(){
-  // 検出揺れ対策で“1秒粘る”
-  if (petalsStopTimer) clearTimeout(petalsStopTimer);
-  petalsStopTimer = setTimeout(() => {
-    if (petalsInterval) clearInterval(petalsInterval);
-    petalsInterval = null;
-    petalsRunning = false;
-  }, 1000);
-}
+    // ===== 夏：波紋 =====
+    function spawnRipple() {
+      const el = document.createElement("div");
+      el.className = "fx-item ripple";
 
-sakuraTarget.addEventListener("targetFound", startPetals);
-sakuraTarget.addEventListener("targetLost", stopPetals);
+      const size = rand(60, 110);
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.style.left = `${20 + Math.random() * 60}%`;
+      el.style.top = `${35 + Math.random() * 22}%`;
 
+      const duration = rand(1600, 2400);
 
+      el.animate(
+        [
+          { transform: "translate(-50%, -50%) scale(0.2)", opacity: 0.0 },
+          { transform: "translate(-50%, -50%) scale(1.2)", opacity: 0.9 },
+          { transform: "translate(-50%, -50%) scale(2.4)", opacity: 0.0 }
+        ],
+        {
+          duration,
+          easing: "ease-out",
+          iterations: 1
+        }
+      );
+
+      fxOverlay.appendChild(el);
+      setTimeout(() => el.remove(), duration + 50);
+    }
+
+    function startSummer() {
+      const state = effectState.summer;
+      if (state.running) return;
+      state.running = true;
+
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.interval = setInterval(() => {
+        spawnRipple();
+      }, 420);
+    }
+
+    function stopSummer() {
+      const state = effectState.summer;
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.stopTimer = setTimeout(() => {
+        clearEffectState(state);
+      }, 1000);
+    }
+
+    // ===== 秋：紅葉 =====
+    function spawnLeaf() {
+      const img = document.createElement("img");
+      img.className = "fx-item leaf";
+      img.src = "./assets/textures/momiji.png";
+
+      const size = rand(50, 70);
+      img.style.width = `${size}px`;
+      img.style.height = `${size}px`;
+      img.style.left = `${Math.random() * 100}%`;
+
+      const duration = rand(2600, 5200);
+      const drift = rand(-90, 90);
+      const rotate = rand(-300, 300);
+
+      img.animate(
+        [
+          { transform: "translate(0, 0) rotate(0deg)", opacity: 0.0 },
+          { transform: `translate(${drift * 0.5}px, 48vh) rotate(${rotate * 0.5}deg)`, opacity: 0.95 },
+          { transform: `translate(${drift}px, 112vh) rotate(${rotate}deg)`, opacity: 0.0 }
+        ],
+        {
+          duration,
+          iterations: 1,
+          easing: "linear"
+        }
+      );
+
+      fxOverlay.appendChild(img);
+      setTimeout(() => img.remove(), duration + 50);
+    }
+
+    function startAutumn() {
+      const state = effectState.autumn;
+      if (state.running) return;
+      state.running = true;
+
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.interval = setInterval(() => {
+        spawnLeaf();
+      }, 380);
+    }
+
+    function stopAutumn() {
+      const state = effectState.autumn;
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.stopTimer = setTimeout(() => {
+        clearEffectState(state);
+      }, 1000);
+    }
+
+    // ===== 冬：雪 =====
+    function spawnSnow() {
+      const el = document.createElement("div");
+      el.className = "fx-item snow";
+
+      const size = rand(8, 18);
+      el.style.width = `${size}px`;
+      el.style.height = `${size}px`;
+      el.style.left = `${Math.random() * 100}%`;
+      el.style.top = "-10%";
+
+      const drift = rand(-30, 30);
+      const duration = rand(4800, 8200);
+
+      el.animate(
+        [
+          { transform: "translate(0, 0)", opacity: 0.0 },
+          { transform: `translate(${drift * 0.5}px, 45vh)`, opacity: 0.95 },
+          { transform: `translate(${drift}px, 112vh)`, opacity: 0.0 }
+        ],
+        {
+          duration,
+          iterations: 1,
+          easing: "linear"
+        }
+      );
+
+      fxOverlay.appendChild(el);
+      setTimeout(() => el.remove(), duration + 50);
+    }
+
+    function startWinter() {
+      const state = effectState.winter;
+      if (state.running) return;
+      state.running = true;
+
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.interval = setInterval(() => {
+        spawnSnow();
+        if (Math.random() < 0.35) spawnSnow();
+      }, 180);
+    }
+
+    function stopWinter() {
+      const state = effectState.winter;
+      if (state.stopTimer) clearTimeout(state.stopTimer);
+
+      state.stopTimer = setTimeout(() => {
+        clearEffectState(state);
+      }, 1000);
+    }
+
+    // ===== ターゲット紐付け =====
+    bindTargetEvents(document.getElementById("t0"), 0, startSpring, stopSpring);
+    bindTargetEvents(document.getElementById("t1"), 1, startSummer, stopSummer);
+    bindTargetEvents(document.getElementById("t2"), 2, startAutumn, stopAutumn);
+    bindTargetEvents(document.getElementById("t3"), 3, startWinter, stopWinter);
+
+    // ===== 言語切替 =====
+    langToggle.addEventListener("click", () => {
+      LANG = LANG === "ja" ? "en" : "ja";
+      updateLangButton();
+      updateHint();
+
+      const currentTitle = panelTitle.textContent;
+      const currentIndex = Object.keys(STAMPS).find((key) => {
+        return STAMPS[key].ja.title === currentTitle || STAMPS[key].en.title === currentTitle;
+      });
+
+      if (currentIndex !== undefined) {
+        const data = STAMPS[currentIndex][LANG];
+        panelTitle.textContent = data.title;
+        panelBody.textContent = data.body;
+      }
+    });
+
+    updateLangButton();
+    updateHint();
   </script>
 </body>
 </html>
