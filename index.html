@@ -211,23 +211,39 @@
 
     // ===== テキスト表示＋演出呼び出し =====
     function bindTargetEvents(el, index, onFound, onLost) {
-      if (!el) return;
+  if (!el) return;
 
-      el.addEventListener("targetFound", () => {
-        const data = STAMPS[index]?.[LANG] || { title: `Item ${index}`, body: "" };
-        panelTitle.textContent = data.title;
-        panelBody.textContent = data.body;
-        panel.style.display = "block";
+  let lostTimer = null;
 
-        if (onFound) onFound();
-      });
+  el.addEventListener("targetFound", () => {
 
-      el.addEventListener("targetLost", () => {
-        panel.style.display = "none";
-
-        if (onLost) onLost();
-      });
+    // 見失いタイマーが動いていたらキャンセル
+    if (lostTimer) {
+      clearTimeout(lostTimer);
+      lostTimer = null;
     }
+
+    const data = STAMPS[index]?.[LANG] || { title: `Item ${index}`, body: "" };
+
+    panelTitle.textContent = data.title;
+    panelBody.textContent = data.body;
+    panel.style.display = "block";
+
+    if (onFound) onFound();
+  });
+
+  el.addEventListener("targetLost", () => {
+
+    // すぐ消さず少し待つ
+    lostTimer = setTimeout(() => {
+
+      panel.style.display = "none";
+
+      if (onLost) onLost();
+
+    }, 1500); // ← 1.5秒保持
+  });
+}
 
     // ===== 共通ユーティリティ =====
     function rand(min, max) {
